@@ -11,6 +11,10 @@ spec:
       labels:
         onos.service: progran
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: node2
+      imagePullSecrets:
+      - name: regcred
       containers:
       - image: cemturker/prograncontrollermcord:0.1.8
         name: progran
