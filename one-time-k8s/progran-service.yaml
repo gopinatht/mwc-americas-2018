@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: progran
+spec:
+  ports:
+  - name: "221"
+    port: 221
+    targetPort: 22
+  - name: "6655"
+    port: 6655
+    targetPort: 6653
+  - name: "8103"
+    port: 8103
+    targetPort: 8101
+  - name: "8183"
+    port: 8183
+    targetPort: 8181
+  - name: "9878"
+    port: 9878
+    targetPort: 9876
+  - name: "4010"
+    port: 4010
+    targetPort: 4010
+  selector:
+    onos.service: progran
+status:
+  loadBalancer: {}

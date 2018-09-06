@@ -1,0 +1,26 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    onos.service: progran
+  name: progran
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        onos.service: progran
+    spec:
+      containers:
+      - image: cemturker/prograncontrollermcord:0.1.8
+        name: progran
+        ports:
+        - containerPort: 22
+        - containerPort: 6653
+        - containerPort: 8101
+        - containerPort: 8181
+        - containerPort: 9876
+        - containerPort: 4010
+        resources: {}
+      restartPolicy: Always
+status: {}
