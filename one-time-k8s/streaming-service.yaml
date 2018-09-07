@@ -1,0 +1,76 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: vlc
+  name: vlc
+  namespace: demo-services
+spec:
+  ports:
+    - port: 9999
+  selector:
+    app: vlc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vlc-1
+  namespace: demo-services
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vlc
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: vlc
+        version: v1
+    spec:
+      containers:
+      - name: vlc
+        image: "trtc008056/alpine-vlc:latest"
+        imagePullPolicy: IfNotPresent
+        command: ["su", "-c", "cvlc -I dummy /usr/share/vlc/bud.mkv --sout=#rtp{sdp=rtsp://0.0.0.0:9999/video --sout-keep --loop --ttl 10 --mtu 900", "-s", "/bin/sh", "vlcuser"]
+        volumeMounts:
+        - name: vlc-content
+          mountPath: /usr/share/vlc
+      volumes:
+      - name: vlc-content
+        hostPath:
+          path: /home/cord/vlc-content
+          type: Directory
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vlc-2
+  namespace: demo-services
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vlc
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: vlc
+        version: v2
+    spec:
+      containers:
+      - name: vlc
+        image: "trtc008056/alpine-vlc:latest"
+        imagePullPolicy: IfNotPresent
+        command: ["su", "-c", "cvlc -I dummy /usr/share/vlc/bud.mkv --sout=#rtp{sdp=rtsp://0.0.0.0:9999/video --sout-keep --loop --ttl 10 --mtu 900", "-s", "/bin/sh", "vlcuser"]
+        volumeMounts:
+        - name: vlc-content
+          mountPath: /usr/share/vlc
+      volumes:
+      - name: vlc-content
+        hostPath:
+          path: /home/cord/vlc-content
+          type: Directory
