@@ -1,0 +1,1269 @@
+
+---
+# Copyright 2017-present Open Networking Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# NOTE: ABOUT LICENSE: From Gopi - The K8S YAML resource section in this file are copied from
+# Intel's resources that were provided to ONF. We need to clarify what licensing terms are imposed
+# for these K8S resources
+
+tosca_definitions_version: tosca_simple_yaml_1_0
+
+description: Make a Virtual EPC22 service
+
+imports:
+  - custom_types/vepcservice.yaml
+  - custom_types/vepcserviceinstance.yaml
+  - custom_types/kubernetesresourceinstance.yaml
+  - custom_types/kubernetesservice.yaml
+  - custom_types/vepcresourceinstancelink.yaml
+
+
+topology_template:
+  node_templates:
+    service#vepcservice:
+      type: tosca.nodes.VEpcService
+      properties:
+        name: vepcservice
+#        must-exist: true
+
+    service#kubernetes:
+      type: tosca.nodes.KubernetesService
+      properties:
+        name: kubernetes
+        must-exist: true
+
+    vepcserviceinstance_epc22:
+      type: tosca.nodes.VEpcServiceInstance
+      properties:
+        name: "EPC22 for Compute"
+      requirements:
+        - owner:
+            node: service#vepcservice
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_ngic_configmap_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "NGIC Config Map for EPC22"
+        resource_definition: |
+          apiVersion: v1
+          data:
+            adc_rules.cfg: |
+              13.1.1.111 Example Internet Zero-Rate
+              13.1.1.112/24 Example Management Zero-Rate
+              13.1.1.113 Example Provisioning Zero-Rate
+              www.example.gov Example Internet Zero-Rate
+              www.drop_example.com DROP Example CIPA
+            cp_config.cfg: |
+              SGW_S11_IP=$(hostname)
+              SGW_S1U_IP=$(netstat -ie | grep -A1 s1u-net | tail -1 | awk '{print $2}' | tr -d addr:)
+              MGMT_INFO="-s ${SGW_S11_IP} -m ${MME_S11_IP} -w ${SGW_S1U_IP}"
+              APN_INFO="-i ${IP_POOL_IP} -p ${IP_POOL_MASK} -a ${APN}"
+              TEID_INFO="-t ${S11_TEID_POOL_START} -e ${S11_TEID_POOL_STOP} -u ${S1U_TEID_POOL_START} -o ${S1U_TEID_POOL_STOP}"
+              APP_ARGS="${MGMT_INFO} ${APN_INFO} ${TEID_INFO}"
+
+              CORES="-c $(taskset -p $$ | awk '{print $NF}')"
+              MEMORY="-n4 --no-huge -m 4096 --file-prefix cp"
+              DEVICES="--no-pci"
+              EAL_ARGS="${CORES} ${MEMORY} ${DEVICES}"
+            dp_config.cfg: |
+              CORES="-c $(taskset -p $$ | awk '{print $NF}')"
+              MEMORY="-n4 --no-huge -m 8192 --file-prefix cp"
+
+              SGW_S1U_IP=$(netstat -ie | grep -A1 s1u-net | tail -1 | awk '{print $2}' | tr -d addr:)
+              SGW_SGI_IP=$(netstat -ie | grep -A1 sgi-net | tail -1 | awk '{print $2}' | tr -d addr:)
+              S1U_MAC=$( netstat -ie | grep -B1 $SGW_S1U_IP | head -n1 | awk '{print $5}' )
+              SGI_MAC=$( netstat -ie | grep -B1 $SGW_SGI_IP | head -n1 | awk '{print $5}' )
+              DEVICES="--no-pci --vdev eth_af_packet0,iface=s1u-net --vdev eth_af_packet1,iface=sgi-net"
+
+              EAL_ARGS="${CORES} ${MEMORY} ${DEVICES}"
+
+              S1U="--s1u_ip ${SGW_S1U_IP} --s1u_mac ${S1U_MAC}"
+              SGI="--sgi_ip ${SGW_SGI_IP} --sgi_mac ${SGI_MAC} --sgi_gw_ip ${RTR_SGI_IP} --sgi_mask ${SGI_MASK}"
+              WORKERS="--num_workers 1"
+              MISC="--log 1"
+
+              APP_ARGS="${S1U} ${SGI} ${WORKERS} ${MISC}"
+            interface.cfg: |
+              [0]
+              dp_comm_ip =  127.0.0.1
+              dp_comm_port = 20
+              cp_comm_ip = 127.0.0.1
+              cp_comm_port = 21
+            static_pcc.cfg: |
+              [GLOBAL]
+              NUM_PACKET_FILTERS = 1
+
+              ;default filter - must be first for now (until DP doesn't install any filters)
+              [PACKET_FILTER_0]
+              RATING_GROUP = 9
+              ;Max Bit Rate (MBR) unit= bps
+              MBR = 512000
+
+          kind: ConfigMap
+          metadata:
+            name: ngic-config
+            namespace: epc22
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_cassandra_configmap_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "Cassandra Config Map for EPC22"
+        resource_definition: |
+          apiVersion: v1
+          data:
+            cassandra-rackdc.properties: |
+              dc=DC1
+              rack=RAC1
+              prefer_local=true
+
+          kind: ConfigMap
+          metadata:
+            name: cassandra
+            namespace: epc22
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_hss_configmap_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "HSS Config Map for EPC22"
+        resource_definition: |
+          apiVersion: v1
+          data:
+            acl.conf: |
+              ALLOW_OLD_TLS   *.cluster.local
+            hss.conf: |
+              # -------- Local ---------
+              # The first parameter in this section is Identity, which will be used to
+              # identify this peer in the Diameter network. The Diameter protocol mandates
+              # that the Identity used is a valid FQDN for the peer. This parameter can be
+              # omitted, in that case the framework will attempt to use system default value
+              # (as returned by hostname --fqdn).
+              Identity = "HSS_IDENTITY";
+
+              # In Diameter, all peers also belong to a Realm. If the realm is not specified,
+              # the framework uses the part of the Identity after the first dot.
+              Realm = "HSS_REALM";
+
+
+              # This parameter is mandatory, even if it is possible to disable TLS for peers
+              # connections. A valid certificate for this Diameter Identity is expected.
+              TLS_Cred = "./conf/HSS_HOST.cert.pem", "./conf/HSS_HOST.key.pem";
+              TLS_CA = "./conf/cacert.pem";
+
+
+              # Disable use of TCP protocol (only listen and connect in SCTP)
+              # Default : TCP enabled
+              No_SCTP;
+
+
+              # This option is ignored if freeDiameter is compiled with DISABLE_SCTP option.
+              # Prefer TCP instead of SCTP for establishing new connections.
+              # This setting may be overwritten per peer in peer configuration blocs.
+              # Default : SCTP is attempted first.
+              Prefer_TCP;
+
+
+              # Disable use of IPv6 addresses (only IP)
+              # Default : IPv6 enabled
+              No_IPv6;
+
+
+              # Overwrite the number of SCTP streams. This value should be kept low,
+              # especially if you are using TLS over SCTP, because it consumes a lot of
+              # resources in that case. See tickets 19 and 27 for some additional details on
+              # this.
+              # Limit the number of SCTP streams
+              SCTP_streams = 3;
+
+
+              # By default, freeDiameter acts as a Diameter Relay Agent by forwarding all
+              # messages it cannot handle locally. This parameter disables this behavior.
+              NoRelay;
+
+
+              # Use RFC3588 method for TLS protection, where TLS is negociated after CER/CEA exchange is completed
+              # on the unsecure connection. The alternative is RFC6733 mechanism, where TLS protects also the
+              # CER/CEA exchange on a dedicated secure port.
+              # This parameter only affects outgoing connections.
+              # The setting can be also defined per-peer (see Peers configuration section).
+              # Default: use RFC6733 method with separate port for TLS.
+
+              #TLS_old_method;
+
+
+              # Number of parallel threads that will handle incoming application messages.
+              # This parameter may be deprecated later in favor of a dynamic number of threads
+              # depending on the load.
+              AppServThreads = 4;
+
+              # Specify the addresses on which to bind the listening server. This must be
+              # specified if the framework is unable to auto-detect these addresses, or if the
+              # auto-detected values are incorrect. Note that the list of addresses is sent
+              # in CER or CEA message, so one should pay attention to this parameter if some
+              # adresses should be kept hidden.
+              #ListenOn = "127.0.0.1";
+
+              Port = 3868;
+              SecPort = 5868;
+
+              LoadExtension = "acl_wl.fdx" : "./conf/acl.conf";
+
+              # -------- Extensions ---------
+
+              #LoadExtension = "/usr/local/lib/freeDiameter/_sample.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/app_acct.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/app_diameap.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/app_radgw.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/app_redirect.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/app_sip.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dbg_interactive.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dbg_monitor.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dbg_msg_dumps.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dbg_msg_timings.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dbg_rt.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_3gpp2_avps.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_CreditControl.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_CxDx.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Gx.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_NAS.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Ro.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Rx.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_S6mS6n.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_SGd.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_SLh.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Sd.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Sh.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_T4.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_T6aT6bT7.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Tsp.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_dcca.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_dcca_3gpp.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_dcca_starent.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_draftload_avps.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_eap.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_etsi283034_avps.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_legacy_xml.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_mip6a.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_mip6i.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_nas_mipv6.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_nasreq.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc4004_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc4006bis_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc4072_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc4590_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc5447_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc5580_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc5777_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc5778_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc6734_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc6942_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc7155_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc7683_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc7944_avps.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_sip.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29061_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29128_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29154_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29173_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29212_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29214_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29215_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29217_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29229_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29272_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29273_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29329_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29336_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29337_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29338_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29343_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29344_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29345_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29368_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29468_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts32299_avps.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/rt_busypeers.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/rt_default.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/rt_ereg.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/rt_ignore_dh.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/rt_load_balance.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/rt_randomize.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/rt_redirect.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/test_acct.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/test_app.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/test_hss.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/test_netemul.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/test_rt_any.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/test_sip.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Rf.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_S6as6d.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_S6t.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_S6c.fdx";
+
+
+              # Load RFC4072 dictionary objects
+              #LoadExtension = "dict_eap.fdx";
+
+              # Load the Diameter EAP server extension (requires diameap.conf)
+              #LoadExtension = "app_diameap.fdx" : "diameap.conf";
+
+              # Load the Accounting Server extension (requires app_acct.conf)
+              #LoadExtension = "app_acct.fdx" : "app_acct.conf";
+
+              # -------- Peers ---------
+
+              # The framework will actively attempt to establish and maintain a connection
+              # with the peers listed here.
+              # For only accepting incoming connections, see the acl_wl.fx extension.
+
+              #ConnectPeer = "peer1.localdomain" { ConnectTo = "127.0.0.1"; };
+            hss.json: |
+              {"common": {
+                  "fdcfg": "conf/hss.conf",
+                  "originhost": "HSS_IDENTITY",
+                  "originrealm": "HSS_REALM"
+              },
+              "hss": {
+                  "gtwhost": "*",
+                  "gtwport" : 9080,
+                  "restport" : 9081,
+                  "casssrv": "CASSANDRA_ADDR",
+                  "cassusr": "root",
+                  "casspwd": "root",
+                  "cassdb" : "vhss",
+                  "randv"  : true,
+                  "optkey" : "63bfa50ee6523365ff14c1f45f88737d",
+                  "reloadkey"  : false
+              }
+              }
+            launch.sh: |
+              #!/bin/bash
+
+              cd /opt/c3po/hss
+              cp /etc/hss/conf/{acl.conf,hss.json,hss.conf} conf 
+
+              HSS_HOST=$(hostname)
+              HSS_DOMAIN=$(dnsdomainname)
+              CASSANDRA_ADDR=${CASSANDRA_ADDR:-localhost}
+
+              # from hss.json
+              sed -i "s/HSS_IDENTITY/$HSS_HOST.$HSS_DOMAIN/g" conf/hss.json
+              sed -i "s/HSS_REALM/$HSS_DOMAIN/g" conf/hss.json
+              sed -i "s/CASSANDRA_ADDR/$CASSANDRA_ADDR/g" conf/hss.json
+
+              # from hss.conf
+              sed -i "s/HSS_IDENTITY/$HSS_HOST.$HSS_DOMAIN/g" conf/hss.conf
+              sed -i "s/HSS_REALM/$HSS_DOMAIN/g" conf/hss.conf
+              sed -i "s/HSS_HOST/$HSS_HOST/g" conf/hss.conf
+
+              # If necessary, calculate the OPc value for each UE (User Equipment).
+              #./bin/hss -j conf/hss.json --onlyloadkey
+
+              cd conf
+              make_certs.sh $(hostname) $(dnsdomainname)
+              cd ..
+
+              # finally, launch
+              hss -j conf/hss.json
+
+          kind: ConfigMap
+          metadata:
+            name: hss
+            namespace: epc22
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_mme_configmap_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "MME Config Map for EPC22"
+        resource_definition: |
+          apiVersion: v1
+          data:
+            launch.sh: |
+              #!/bin/bash
+
+              cd /opt/c3po/mme/bin
+              cp /etc/mme/conf/{vbsm_cfg.txt,vbfd.conf} .
+
+              # from vbsm_cfg.txt
+              SGW_S11_IP=${SGW_S11_IP:-sgw.localdomain}
+              ENB_S1AP_IP=${ENB_S1AP_IP:-enb1.localdomain}
+              ENB_S1AP_PORT=${ENB_S1AP_PORT:-36412}
+              MME_ETH0_IP=${MME_ETH0_IP:-0.0.0.0}
+
+              # from vbfd.conf
+              CONNECT_PEER=${CONNECT_PEER:-hss.localdomain}
+              HSS_S6A_IP=${HSS_S6A_IP:-hss.localdomain}
+              HSS_PORT=${HSS_PORT:-3868}
+              VAR_HSS_REALM=${VAR_HSS_REALM:-openair4G.eur}
+
+
+              sed -i "s/SGW_S11_IP/$(dig $SGW_S11_IP +short)/g" vbsm_cfg.txt
+              sed -i "s/ENB_S1AP_IP/$ENB_S1AP_IP/g" vbsm_cfg.txt
+              sed -i "s/ENB_S1AP_PORT/$ENB_S1AP_PORT/g" vbsm_cfg.txt
+              sed -i "s/MME_ETH0_IP/$MME_ETH0_IP/g" vbsm_cfg.txt
+              sed -i "s/VAR_HSS_HOST/$CONNECT_PEER/g" vbsm_cfg.txt
+              sed -i "s/VAR_HSS_REALM/$VAR_HSS_REALM/g" vbsm_cfg.txt
+
+
+              MME_HOST=$(hostname)
+              MME_DOMAIN=$(dnsdomainname)
+              sed -i "s/CONNECT_PEER/$CONNECT_PEER/g" vbfd.conf
+              sed -i "s/HSS_S6A_IP/$HSS_S6A_IP/g" vbfd.conf
+              sed -i "s/HSS_PORT/$HSS_PORT/g" vbfd.conf
+              sed -i "s/MME_IDENTITY/$MME_HOST.$MME_DOMAIN/g" vbfd.conf
+              sed -i "s/MME_REALM/$MME_DOMAIN/g" vbfd.conf
+              sed -i "s/MME_HOST/$MME_HOST/g" vbfd.conf
+
+              # generate the certs
+              # ./make_certs.sh mme localdomain
+              ./make_certs.sh $MME_HOST $MME_DOMAIN
+
+
+              # finally, launch
+              ./vb_acc
+            vbfd.conf: |
+              # -------- Test configuration ---------
+
+              # Identity = "<diameter_host>.<diameter_realm>";
+              Identity = "MME_IDENTITY";
+              Realm = "MME_REALM";
+              # Port = 3868;
+              # SecPort = 3869;
+
+              ConnectPeer = "CONNECT_PEER" { ConnectTo = "HSS_S6A_IP"; No_TLS; port = HSS_PORT; };
+
+              # TLS_Cred = "<diameter_host>.cert.pem", "<diameter_host>.key.pem";
+              TLS_Cred = "MME_HOST.cert.pem",
+                  "MME_HOST.key.pem";
+              TLS_CA = "cacert.pem";
+
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_3gpp2_avps.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_CreditControl.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_base_rfc6733.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_draftload_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_etsi283034_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc4004_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc4006bis_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc4072_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc4590_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc5447_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc5580_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc5777_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc5778_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc6734_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc6942_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc7155_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc7683_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_rfc7944_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29061_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29128_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29154_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29173_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29212_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29214_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29215_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29217_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29229_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29272_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29273_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29329_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29336_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29337_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29338_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29343_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29344_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29345_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29368_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts29468_avps.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_ts32299_avps.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_CxDx.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Gx.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_NAS.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Rf.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Ro.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Rx.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_S6as6d.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_S6c.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_S6mS6n.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_S6t.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_S9.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_SGd.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_SLh.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Sd.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Sh.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_T4.fdx";
+              LoadExtension = "/usr/local/lib/freeDiameter/dict_T6aT6bT7.fdx";
+              #LoadExtension = "/usr/local/lib/freeDiameter/dict_Tsp.fdx";
+            vbsm_cfg.txt: |
+              # Configuration file for MME
+
+              #####  NOTE: Please Do NOT change the order of the parameters #####
+
+              # EGTP related
+              VBSM_EG_DFLT_PORT                2123                     # EGTP Default port
+              VBSM_EG_NONDFLT_PORT             2124                     # EGTP Non Default port
+              VBSM_EG_S10_NONDFLT_PORT         2125                     # EGTP Non Default
+              VBSM_EG_S3_NONDFLT_PORT          2126                     # EGTP Non Default port for S3 interface towards SGSN
+                                                                        # port for S10
+              VBSM_EG_DFLT_HOST_NAME           "sutlej.ccin.ccpu.com"   # EGTP host name
+
+
+              # E-NodeB related
+              VBSM_ENB_ADDR_1                  "ENB_S1AP_IP"      # IP address of eNodeB
+              VBSM_ENB_PORT_1                  "ENB_S1AP_PORT"    # eNodeB port
+              #VBSM_ENB_ADDR_2                  "172.26.20.180"    # IP address of eNodeB
+              #VBSM_ENB_PORT_2                  36422              # eNodeB port
+
+              # MME related
+              VBSM_MME_IPADDR                  "MME_ETH0_IP"    # MME IP address
+              VBSM_MME_S1AP_IPADDR             "MME_ETH0_IP"    # MME IP address associated with the S1AP interface
+              VBSM_MME_EGTP_IPADDR             "MME_ETH0_IP"    # MME IP address associated with the EGTP interface
+              VBSM_MME_SCTP_PORT               36412              # MME SCTP port
+
+              VBSM_SGW_IPADDR                  "SGW_S11_IP"   # SGW IP address
+              VBSM_PGW_IPADDR                  "192.168.1.105"    # PDN-GW IP address
+
+              VBSM_UE_NUM                      1000             # Support 1000 UE's
+              VBSM_SCTP_UDP_SERV_TYPE          0              #service type,default 0 SCTP
+
+              # Debug mask to be set; each represent
+              #different debug masks to be set (1 and 0 to unset)
+              #in the form |LVB_DBGMASK_INFO|LVB_DBGMASK_ERROR|LVB_DBGMASK_TRC|LVB_DBGMASK_MEM
+
+              VBSM_MME_DBG_MASK                1111
+              VBSM_DBG_MASK                    1111
+              VBSM_NW_INIATED_DETACH_TIMER     1000
+
+              VBSM_MCC_DIG1         2
+              VBSM_MCC_DIG2         0
+              VBSM_MCC_DIG3         8
+
+              VBSM_MNC_DIG1         0
+              VBSM_MNC_DIG2         1
+              VBSM_MNC_DIG3         -1
+
+              # Target PLMN ID format [ MCC + MNC], + is concatination operator
+              # If MNC has two digits, the last charater shall be 'f'
+              # Valid Configurations: 11223f, 112345.
+              VBSM_TARGET_MME_PLMN_ID          31310f
+              VBSM_TARGET_MME_IP_ADDR          "192.25.1.100"
+
+              VBSM_T3412                        32
+
+              VBSM_SGSN_IP_ADDR                "192.25.1.195"
+
+
+              VBSM_SGSN_PLMN_ID        31311f
+
+              VBSM_FD_CFG  "vbfd.conf"
+              VBSM_HSS_HOST "VAR_HSS_HOST"
+              VBSM_HSS_REALM "VAR_HSS_REALM"
+
+              # set VBSM_DISABLE_EPC_DNS 0 - enable DNS,  1 - disable DNS
+              VBSM_DISABLE_EPC_DNS 1
+              VBSM_DISABLE_EIA0 1
+              VBSM_REL_CAP 1
+              VBSM_MME_NAME "vmmestandalone"
+              VBSM_S1C_SCTP_INSTREAMS 10
+              VBSM_S1C_SCTP_OUTSTREAMS 10
+              VBSM_MAX_ENB  2
+              VBSM_NO_OFGUMMEIS 1
+              VBSM_MMECODE  1
+              VBSM_MMEGRPID 1
+              VBSM_NO_OF_TAI 1
+              VBSM_TAI_LIST    {{1,2,0,8,0,1,1}}
+
+              VBSM_SMS_ROUTER_HOST "smsrouter.test3gpp.net"
+              VBSM_SMS_ROUTER_REALM "test3gpp.net"
+
+          kind: ConfigMap
+          metadata:
+            name: mme
+            namespace: epc22
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_mme_service_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "MME Service for EPC22"
+        resource_definition: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: mme
+            namespace: epc22
+          spec:
+            selector:
+              app: mme
+            clusterIP: None
+            ports:
+            - name: s11
+              port: 2123
+              protocol: UDP
+            - name: s1ap
+              port: 36412
+              protocol: TCP
+            - name: s6a
+              port: 3868
+              protocol: TCP
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_mme_statefulset_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "MME StatefulSet for EPC22"
+        resource_definition: |
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: mme
+            namespace: epc22
+            labels:
+              app: mme
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: mme
+            serviceName: "mme"
+            template:
+              metadata:
+                labels:
+                  app: mme
+              spec:
+                nodeSelector:
+                  kubernetes.io/hostname: node2
+                terminationGracePeriodSeconds: 1
+                initContainers:
+                - name: init-mme
+                  image: "ngick8stesting/c3po-mmeinit"
+                  command: [ "sh", "-c"]
+                  securityContext:
+                    capabilities:
+                      add:
+                        - NET_ADMIN
+                  args:
+                  - iptables -A OUTPUT -p sctp --sport 36412 --chunk-types any ABORT -j DROP;
+                    until nslookup hss-0.hss.epc22.svc.cluster.local;
+                    do echo waiting for hss; sleep 2; done;
+                containers:
+                - name: cord-infra-sidecar
+                  image: gopinatht/cord-infra-sidecar:latest
+                  env:
+                    - name: MY_POD_NAME
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.name
+                    - name: MY_POD_NAMESPACE
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.namespace
+                    - name: MY_POD_IP
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: status.podIP
+                  imagePullPolicy: Always
+                - name: mme
+                  image: "ngick8stesting/c3po-mme:5e2eaf6"
+                  imagePullPolicy: Always
+                  env:
+                    - name: SGW_S11_IP
+                      value: ngic-0.ngic.epc22.svc.cluster.local
+                    - name: MME_ETH0_IP
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: status.podIP
+                    - name: ENB_S1AP_IP
+                      value: 118.0.0.10
+                    - name: ENB_S1AP_PORT
+                      value: "36412"   #ng4t uses 32767
+                    - name: CONNECT_PEER
+                      value: hss-0.hss.epc22.svc.cluster.local
+                    - name: VAR_HSS_REALM
+                      value: hss.epc22.svc.cluster.local
+                    - name: HSS_S6A_IP
+                      value: hss-0.hss.epc22.svc.cluster.local
+                    - name: HSS_PORT
+                      value: "3868"
+                  stdin: true
+                  tty: true
+                  #command: [ "sleep", "3600"]
+                  resources:
+                    limits:
+                      cpu: 3
+                      memory: 1Gi
+                  volumeMounts:
+                  - name: mme-script
+                    mountPath: /opt/c3po/mme/bin/launch.sh
+                    subPath: launch.sh
+                  - name: mme-config
+                    mountPath: /etc/mme/conf
+                volumes:
+                - name: mme-script
+                  configMap:
+                    name: mme
+                    defaultMode: 493
+                - name: mme-config
+                  configMap:
+                    name: mme
+                    defaultMode: 420
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_hss_service_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "HSS Service for EPC22"
+        resource_definition: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: hss
+            namespace: epc22
+          spec:
+            selector:
+              app: hss
+            clusterIP: None
+            ports:
+            - name: s6a
+              port: 3868
+              protocol: TCP
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_hss_statefulset_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "HSS StatefulSet for EPC22"
+        resource_definition: |
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: hss
+            namespace: epc22
+            labels:
+              app: hss
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: hss
+            serviceName: "hss"
+            template:
+              metadata:
+                labels:
+                  app: hss
+              spec:
+                terminationGracePeriodSeconds: 1
+                initContainers:
+                - name: init-db
+                  image: "ngick8stesting/c3po-cassandra:5e2eaf6"
+                  command: [ "bash", "-xc"]
+                  args:
+                  - until nslookup cassandra; do echo waiting for cassandra; sleep 2; done;
+                    cqlsh --file /scripts/oai_db.cql cassandra;
+                    /scripts/data_provisioning_users.sh 302720100000421 1122334456 apn1 6226194254742F2D67145153602F7C8D 1 cassandra mme-0.mme.epc22.svc.cluster.local mme.epc22.svc.cluster.local;
+                    cqlsh -e "use vhss; update users_imsi set opc='D6CAF10C337FD65AC31A18EBACBF5BF9' where imsi='302720100000421';" cassandra;
+                    cqlsh -e "select imsi,key,opc,sqn from vhss.users_imsi;" cassandra;
+                    /scripts/data_provisioning_users.sh 302720100000420 1122334456 apn1 6226194254742F2D67145153602F7C8D 1 cassandra mme-0.mme.epc22.svc.cluster.local mme.epc22.svc.cluster.local;
+                    cqlsh -e "use vhss; update users_imsi set opc='D6CAF10C337FD65AC31A18EBACBF5BF9' where imsi='302720100000420';" cassandra;
+                    cqlsh -e "select imsi,key,opc,sqn from vhss.users_imsi;" cassandra;
+                    /scripts/data_provisioning_mme.sh 1 19136246000 mme-0.mme.epc22.svc.cluster.local mme.epc22.svc.cluster.local 1 cassandra;
+                    /scripts/data_provisioning_mme.sh 1 19136246000 smsrouter.test3gpp.net test3gpp.net 0  cassandra;
+                containers:
+                - name: hss
+                  image: "ngick8stesting/c3po-hss:5e2eaf6"
+                  imagePullPolicy: Always
+                  env:
+                    - name: CASSANDRA_ADDR
+                      value: cassandra
+                    - name: MME_ADDR
+                      value: mme-0.mme.epc22.svc.cluster.local
+                  #command: [ "sleep", "3600"]
+                  resources:
+                    limits:
+                      cpu: 3
+                      memory: 1Gi
+                  volumeMounts:
+                  - name: hss-script
+                    mountPath: /opt/c3po/hss/launch.sh
+                    subPath: launch.sh
+                  - name: hss-config
+                    mountPath: /etc/hss/conf
+                volumes:
+                - name: hss-script
+                  configMap:
+                    name: hss
+                    defaultMode: 493
+                - name: hss-config
+                  configMap:
+                    name: hss
+                    defaultMode: 420
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_hssdb_service_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "HSS Cassandra Service for EPC22"
+        resource_definition: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            labels:
+              app: cassandra
+            name: cassandra
+            namespace: epc22
+          spec:
+            clusterIP: None
+            ports:
+              - port: 9042
+            selector:
+              app: cassandra
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_hssdb_statefulset_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "HSS Cassandra StatefulSet for EPC22"
+        resource_definition: |
+          apiVersion: "apps/v1"
+          kind: StatefulSet
+          metadata:
+            name: cassandra
+            namespace: epc22
+            labels:
+              app: cassandra
+          spec:
+            serviceName: cassandra
+            replicas: 1 # 3
+            selector:
+              matchLabels:
+                app: cassandra
+            template:
+              metadata:
+                labels:
+                  app: cassandra
+              spec:
+                securityContext:
+                  runAsUser: 999
+                  fsGroup: 999
+                terminationGracePeriodSeconds: 1
+                containers:
+                - name: cassandra
+                  image: ngick8stesting/c3po-cassandra:5e2eaf6
+                  imagePullPolicy: Always
+                  ports:
+                  - containerPort: 7000
+                    name: intra-node
+                  - containerPort: 7001
+                    name: tls-intra-node
+                  - containerPort: 7199
+                    name: jmx
+                  - containerPort: 9042
+                    name: cql
+                  resources:
+                    limits:
+                      cpu: "3"
+                      memory: 4Gi
+                  # Probably Cassandra:3.x?
+                  #securityContext:
+                  #  capabilities:
+                  #    add:
+                  #      - IPC_LOCK
+                  # Later
+                  #lifecycle:
+                  #  preStop:
+                  #    exec:
+                  #      command:
+                  #      - /bin/sh
+                  #      - -c
+                  #      - nodetool drain
+                  env:
+                  # Performance optimizations
+                    - name: MAX_HEAP_SIZE
+                      value: 512M
+                    - name: HEAP_NEWSIZE
+                      value: 100M
+                    - name: CASSANDRA_SEEDS
+                      value: "cassandra-0.cassandra.epc22.svc.cluster.local"
+                    - name: CASSANDRA_CLUSTER_NAME
+                      value: "HSS Cluster"
+                    - name: CASSANDRA_RPC_ADDRESS
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: status.podIP
+                    - name: CASSANDRA_ENDPOINT_SNITCH
+                      value: "GossipingPropertyFileSnitch"
+                  readinessProbe:
+                    exec:
+                      command: ["/bin/bash", "-c", "nodetool status -r | awk -v h=$(hostname) '$2==h {exit ($1==\"UN\" ? 0 : -1)}'"]
+                    initialDelaySeconds: 15
+                    timeoutSeconds: 5
+                  volumeMounts:
+                  - name: cassandra-config
+                    mountPath: /etc/cassandra/cassandra-rackdc.properties
+                    subPath: cassandra-rackdc.properties
+          #        - name: cassandra-data
+          #          mountPath: /var/lib/cassandra
+                volumes:
+                - name: cassandra-config
+                  configMap:
+                    name: cassandra
+          #  volumeClaimTemplates:
+          #  - metadata:
+          #      name: cassandra-data
+          #    spec:
+          #      accessModes: [ "ReadWriteOnce" ]
+          #      resources:
+          #        requests:
+          #          storage: 1Gi
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_spgwcu_service_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "SPGW Control and User Service for EPC22"
+        resource_definition: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: ngic
+            namespace: epc22
+          spec:
+            selector:
+              app: ngic
+            clusterIP: None
+            ports:
+            - name: s11
+              port: 2123
+              protocol: UDP
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    kubernetesresourceinstance_spgwcu_statefulset_epc22:
+      type: tosca.nodes.KubernetesResourceInstance
+      properties:
+        name: "SPGW Control and User StatefulSet for EPC22"
+        resource_definition: |
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: ngic
+            namespace: epc22
+            labels:
+              app: ngic
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: ngic
+            serviceName: "ngic"
+            template:
+              metadata:
+                labels:
+                  app: ngic
+                annotations:
+                  kubernetes.v1.cni.cncf.io/networks: '[
+                          { "name": "s1u-net", "interfaceRequest": "s1u-net" },
+                          { "name": "sgi-net", "interfaceRequest": "sgi-net" }
+                  ]'        
+              spec:
+                initContainers:
+                - name: init-iptables
+                  image: "ngick8stesting/c3po-mmeinit"
+                  command: [ "sh", "-c"]
+                  securityContext:
+                    capabilities:
+                      add:
+                        - NET_ADMIN
+                  args:
+                  - iptables -I OUTPUT -p icmp --icmp-type destination-unreachable -j DROP;
+                terminationGracePeriodSeconds: 1
+                containers:
+                - name: ngic-cp
+                  image: "ngick8stesting/ngic-cp:d9b315c"
+                  stdin: true
+                  command: [ "bash",  "-cx", ". /opt/ngic/config/cp_config.cfg; ./ngic_controlplane  $EAL_ARGS -- $APP_ARGS"]
+                  #command: ["sleep", "3600"]
+                  tty: true
+                  env:
+                    - name: MME_S11_IP
+                      value: mme-0.mme.epc22.svc.cluster.local
+                    #- name: SGW_S1U_IP  # for now,this will be in our own pod
+                    #  value: "5.5.5.5"
+                    - name: APN
+                      value: apn1
+                    - name: IP_POOL_IP
+                      value: "17.0.0.0"
+                    - name: IP_POOL_MASK
+                      value: "255.240.0.0"
+                    - name: S11_TEID_POOL_START
+                      value: "00100000"
+                    - name: S11_TEID_POOL_STOP
+                      value: "001fffff"
+                    - name: S1U_TEID_POOL_START
+                      value: "00100000"
+                    - name: S1U_TEID_POOL_STOP
+                      value: "001fffff"
+                  volumeMounts:
+                  - name: config-volume
+                    mountPath: /opt/ngic/config
+                  #- name: hugepage
+                  #  mountPath: /dev/hugepages
+                  resources:
+                    limits:
+                      #hugepages-2Mi: 4Gi
+                      cpu: 3
+                      memory: 4Gi
+                - name: ngic-dp
+                  image: "ngiccorddemo/ngic-dp:k8s-bm"
+                  stdin: true
+                  tty: true
+                  env:
+                  - name: RTR_SGI_IP 
+                    value: "13.1.1.110"
+                  - name: SGI_MASK
+                    value: "255.255.255.0"
+                  command: [ "bash",  "-cx", ". /opt/ngic/config/dp_config.cfg ; ./ngic_dataplane  $EAL_ARGS -- $APP_ARGS"]
+                  #command: ["sleep", "3600"]
+                  volumeMounts:
+                  - name: config-volume
+                    mountPath: /opt/ngic/config
+                  #- name: hugepage
+                  #  mountPath: /dev/hugepages
+                  resources:
+                    limits:
+                      #hugepages-1Gi: 8Gi
+                      cpu: 8
+                      memory: 8Gi #200Mi
+                      intel.com/sriov: '2'            
+                  securityContext:
+                    privileged: true
+                    capabilities:
+                      add:
+                        - NET_ADMIN
+                        - IPC_LOCK            
+                volumes:
+                  - name: config-volume
+                    configMap:
+                      name: ngic-config
+                  #- name: hugepage
+                  #  emptyDir:
+                  #    medium: HugePages
+
+      requirements:
+        - owner:
+            node: service#kubernetes
+            relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_ngic_configmap_epc22:
+      type: tosca.nodes.VEpcResourceInstanceLink
+      properties:
+         name: "NGIC ConfigMap Resource Link for EPC22"
+
+      requirements:
+        - resource_instance:
+            node: kubernetesresourceinstance_ngic_configmap_epc22
+            relationship: tosca.relationships.BelongsToOne
+        - vepc_service_instance:
+            node: vepcserviceinstance_epc22
+            relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_cassandra_configmap_epc22:
+      type: tosca.nodes.VEpcResourceInstanceLink
+      properties:
+         name: "Cassandra ConfigMap Resource Link for EPC22"
+
+      requirements:
+        - resource_instance:
+            node: kubernetesresourceinstance_cassandra_configmap_epc22
+            relationship: tosca.relationships.BelongsToOne
+        - vepc_service_instance:
+            node: vepcserviceinstance_epc22
+            relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_hss_configmap_epc22:
+      type: tosca.nodes.VEpcResourceInstanceLink
+      properties:
+         name: "HSS ConfigMap Resource Link for EPC22"
+
+      requirements:
+        - resource_instance:
+            node: kubernetesresourceinstance_hss_configmap_epc22
+            relationship: tosca.relationships.BelongsToOne
+        - vepc_service_instance:
+            node: vepcserviceinstance_epc22
+            relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_mme_configmap_epc22:
+      type: tosca.nodes.VEpcResourceInstanceLink
+      properties:
+         name: "MME ConfigMap Resource Link for EPC22"
+
+      requirements:
+        - resource_instance:
+            node: kubernetesresourceinstance_mme_configmap_epc22
+            relationship: tosca.relationships.BelongsToOne
+        - vepc_service_instance:
+            node: vepcserviceinstance_epc22
+            relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_mme_service_epc22:
+      type: tosca.nodes.VEpcResourceInstanceLink
+      properties:
+         name: "MME Service Resource Link for EPC22"
+
+      requirements:
+        - resource_instance:
+            node: kubernetesresourceinstance_mme_service_epc22
+            relationship: tosca.relationships.BelongsToOne
+        - vepc_service_instance:
+            node: vepcserviceinstance_epc22
+            relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_mme_statefulset_epc22:
+        type: tosca.nodes.VEpcResourceInstanceLink
+        properties:
+          name: "MME StatefulSet Resource Link for EPC22"
+
+        requirements:
+          - resource_instance:
+              node: kubernetesresourceinstance_mme_statefulset_epc22
+              relationship: tosca.relationships.BelongsToOne
+          - vepc_service_instance:
+              node: vepcserviceinstance_epc22
+              relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_hss_service_epc22:
+      type: tosca.nodes.VEpcResourceInstanceLink
+      properties:
+         name: "HSS Service Resource Link for EPC22"
+
+      requirements:
+        - resource_instance:
+            node: kubernetesresourceinstance_hss_service_epc22
+            relationship: tosca.relationships.BelongsToOne
+        - vepc_service_instance:
+            node: vepcserviceinstance_epc22
+            relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_hss_statefulset_epc22:
+        type: tosca.nodes.VEpcResourceInstanceLink
+        properties:
+          name: "HSS StatefulSet Resource Link for EPC22"
+
+        requirements:
+          - resource_instance:
+              node: kubernetesresourceinstance_hss_statefulset_epc22
+              relationship: tosca.relationships.BelongsToOne
+          - vepc_service_instance:
+              node: vepcserviceinstance_epc22
+              relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_hssdb_service_epc22:
+      type: tosca.nodes.VEpcResourceInstanceLink
+      properties:
+         name: "HSS Cassandra Service Resource Link for EPC22"
+
+      requirements:
+        - resource_instance:
+            node: kubernetesresourceinstance_hssdb_service_epc22
+            relationship: tosca.relationships.BelongsToOne
+        - vepc_service_instance:
+            node: vepcserviceinstance_epc22
+            relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_hssdb_statefulset_epc22:
+        type: tosca.nodes.VEpcResourceInstanceLink
+        properties:
+          name: "HSS Cassandra StatefulSet Resource Link for EPC22"
+
+        requirements:
+          - resource_instance:
+              node: kubernetesresourceinstance_hssdb_statefulset_epc22
+              relationship: tosca.relationships.BelongsToOne
+          - vepc_service_instance:
+              node: vepcserviceinstance_epc22
+              relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_spgwcu_service_epc22:
+      type: tosca.nodes.VEpcResourceInstanceLink
+      properties:
+         name: "SPGW Contol and User Service Resource Link for EPC22"
+
+      requirements:
+        - resource_instance:
+            node: kubernetesresourceinstance_spgwcu_service_epc22
+            relationship: tosca.relationships.BelongsToOne
+        - vepc_service_instance:
+            node: vepcserviceinstance_epc22
+            relationship: tosca.relationships.BelongsToOne
+
+    vepcresourceinstancelink_spgwcu_statefulset_epc22:
+        type: tosca.nodes.VEpcResourceInstanceLink
+        properties:
+          name: "HS SPGW Control and User StatefulSet Resource Link for EPC22"
+
+        requirements:
+          - resource_instance:
+              node: kubernetesresourceinstance_spgwcu_statefulset_epc22
+              relationship: tosca.relationships.BelongsToOne
+          - vepc_service_instance:
+              node: vepcserviceinstance_epc22
+              relationship: tosca.relationships.BelongsToOne
