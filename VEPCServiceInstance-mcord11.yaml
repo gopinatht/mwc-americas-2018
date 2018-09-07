@@ -1047,7 +1047,7 @@ topology_template:
                     - name: APN
                       value: apn1
                     - name: IP_POOL_IP
-                      value: "16.0.0.0"
+                      value: "11.0.0.0"
                     - name: IP_POOL_MASK
                       value: "255.240.0.0"
                     - name: S11_TEID_POOL_START
