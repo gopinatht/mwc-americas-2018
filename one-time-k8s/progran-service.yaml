@@ -18,6 +18,7 @@ spec:
   - name: "8183"
     port: 8183
     targetPort: 8181
+    nodePort: 30415
   - name: "9878"
     port: 9878
     targetPort: 9876
