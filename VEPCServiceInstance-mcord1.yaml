@@ -682,6 +682,22 @@ topology_template:
                     until nslookup hss-0.hss.epc1.svc.cluster.local;
                     do echo waiting for hss; sleep 2; done;
                 containers:
+                - name: cord-infra-sidecar
+                  image: gopinatht/cord-infra-sidecar:latest
+                  env:
+                    - name: MY_POD_NAME
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.name
+                    - name: MY_POD_NAMESPACE
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.namespace
+                    - name: MY_POD_IP
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: status.podIP
+                  imagePullPolicy: Always
                 - name: mme
                   image: "ngick8stesting/c3po-mme:5e2eaf6"
                   imagePullPolicy: Always
