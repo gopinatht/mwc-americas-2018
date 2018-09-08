@@ -3,7 +3,7 @@
 curl -L https://git.io/getLatestIstio | sh -
 
 # CD into istio directory
-cd istio-1.0.2
+cd istio-1.0.1
 export PATH=$PWD/bin:$PATH
 
 kubectl apply -f install/kubernetes/helm/istio/templates/crds.yaml

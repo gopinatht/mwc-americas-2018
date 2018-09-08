@@ -1,12 +1,15 @@
 #!/bin/bash
 
-# Some house keeping commands
+# Some house keeping commands on all nodes
 #sudo mkdir -p /home/cord/nginx-content
+#sudo mkdir -p /home/cord/vlc-content
 #sudo chmod 777 /home/cord
 #sudo chmod 777 /home/cord/nginx-content
+#sudo chmod 777 /home/cord/vlc-content
 #cd /home/cord/nginx-content
 #fallocate -l 10G mwcdownload.bin
-#
+#cd /home/cord/vlc-content
+# Add the video file to this directory
 
 kubectl create namespace demo-services
 kubectl label namespace demo-services istio-injection=enabled
@@ -27,9 +30,7 @@ export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 
 kubectl apply -f download-destination-rule.yaml
 
-kubectl apply -f streaming-service.yaml
-
-#TESTING Commands
+#TESTING Download service commands
 #kubectl run my-shell --rm -i --tty --image ubuntu -- bash
 #kubectl exec <ubuntu pod>
 #apt-get update
@@ -40,3 +41,14 @@ kubectl apply -f streaming-service.yaml
 #kubectl apply -f demodownload-route-v2.yaml && kubectl apply -f download-deployment-v2.yaml && kubectl delete -f download-deployment-v1.yaml
 
 #kubectl apply -f demodownload-route-v1.yaml && kubectl apply -f download-deployment-v1.yaml && kubectl delete -f download-deployment-v2.yaml
+
+kubectl apply -f streaming-service.yaml
+kubectl apply -f streaming-deployment-v1.yaml
+kubectl apply -f streaming-gateway.yaml
+kubectl apply -f demostreaming-route-v1.yaml
+
+#TESTING Download service commands
+
+#kubectl apply -f demostreaming-route-v2.yaml && kubectl apply -f streaming-deployment-v2.yaml && kubectl delete -f streaming-deployment-v1.yaml
+
+#kubectl apply -f demostreaming-route-v1.yaml && kubectl apply -f streaming-deployment-v1.yaml && kubectl delete -f streaming-deployment-v2.yaml

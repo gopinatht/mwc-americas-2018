@@ -4,7 +4,7 @@ kind: DestinationRule
 metadata:
   name: streaming
 spec:
-  host: nginx.demo-services.svc.cluster.local
+  host: vlc.demo-services.svc.cluster.local
   subsets:
   - name: streamingv1
     labels:
