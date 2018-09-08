@@ -12,6 +12,8 @@ spec:
   - match:
     - uri:
         exact: /mwcdownload.bin
+    - uri:
+        exact: /dummy-file
     route:
     - destination:
         host: nginx.demo-services.svc.cluster.local
