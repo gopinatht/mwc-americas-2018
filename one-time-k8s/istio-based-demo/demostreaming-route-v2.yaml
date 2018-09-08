@@ -1,0 +1,20 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: demostreaming
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - streaming-gateway
+  http:
+  - match:
+    - uri:
+        exact: /mwcdownload.bin
+    route:
+    - destination:
+        host: vlc.demo-services.svc.cluster.local
+        subset: streamingv2
+        port:
+          number: 9999
