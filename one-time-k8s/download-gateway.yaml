@@ -1,0 +1,34 @@
+
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: download-gateway
+spec:
+  selector:
+    istio: ingressgateway # use istio default controller
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: demodownload
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - download-gateway
+  http:
+  - match:
+    - uri:
+        exact: /mwcdownload.bin
+    route:
+    - destination:
+        host: nginx.demo-services.svc.cluster.local
+        port:
+          number: 80
