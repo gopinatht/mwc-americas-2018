@@ -22,12 +22,12 @@ spec:
   selector:
     matchLabels:
       app: nginx
-      version: v1
+      version: downloadv1
   template:
     metadata:
       labels:
         app: nginx
-        version: v1
+        version: downloadv1
     spec:
       containers:
       - name: nginx
@@ -53,12 +53,12 @@ spec:
   selector:
     matchLabels:
       app: nginx
-      version: v2
+      version: downloadv2
   template:
     metadata:
       labels:
         app: nginx
-        version: v2
+        version: downloadv2
     spec:
       containers:
       - name: nginx

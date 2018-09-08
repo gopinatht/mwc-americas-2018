@@ -2,13 +2,13 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: DestinationRule
 metadata:
-  name: download
+  name: streaming
 spec:
   host: nginx.demo-services.svc.cluster.local
   subsets:
-  - name: downloadv1
+  - name: streamingv1
     labels:
-      version: downloadv1
-  - name: downloadv2
+      version: streamingv1
+  - name: streamingv2
     labels:
-      version: downloadv2
+      version: streamingv2

@@ -10,4 +10,4 @@ spec:
   - route:
     - destination:
         host: nginx.demo-services.svc.cluster.local
-        subset: v2
+        subset: downloadv2

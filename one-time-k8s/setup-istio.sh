@@ -11,3 +11,4 @@ kubectl apply -f install/kubernetes/istio-demo.yaml
 
 #Wait a couple of minutes
 sleep 2m
+

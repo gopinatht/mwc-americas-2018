@@ -2,12 +2,12 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
-  name: download
+  name: streaming
 spec:
   hosts:
-  - download
+  - streaming
   http:
   - route:
     - destination:
-        host: nginx.demo-services.svc.cluster.local
-        subset: downloadv1
+        host: vlc.demo-services.svc.cluster.local
+        subset: streamingv2

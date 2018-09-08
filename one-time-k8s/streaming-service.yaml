@@ -22,12 +22,12 @@ spec:
   selector:
     matchLabels:
       app: vlc
-      version: v1
+      version: streamingv1
   template:
     metadata:
       labels:
         app: vlc
-        version: v1
+        version: streamingv1
     spec:
       containers:
       - name: vlc
@@ -54,12 +54,12 @@ spec:
   selector:
     matchLabels:
       app: vlc
-      version: v2
+      version: streamingv2
   template:
     metadata:
       labels:
         app: vlc
-        version: v2
+        version: streamingv2
     spec:
       containers:
       - name: vlc
