@@ -20,7 +20,7 @@
 
 tosca_definitions_version: tosca_simple_yaml_1_0
 
-description: Make a Virtual EPC22 service
+description: Make a Virtual EPC Container service
 
 imports:
   - custom_types/vepcservice.yaml
@@ -44,19 +44,19 @@ topology_template:
         name: kubernetes
         must-exist: true
 
-    vepcserviceinstance_epc22:
+    vepcserviceinstance_epc_container:
       type: tosca.nodes.VEpcServiceInstance
       properties:
-        name: "EPC22 for Compute"
+        name: "EPC for Container"
       requirements:
         - owner:
             node: service#vepcservice
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_ngic_configmap_epc22:
+    kubernetesresourceinstance_ngic_configmap_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "NGIC Config Map for EPC22"
+        name: "NGIC Config Map for EPC Container"
         resource_definition: |
           apiVersion: v1
           data:
@@ -115,17 +115,17 @@ topology_template:
           kind: ConfigMap
           metadata:
             name: ngic-config
-            namespace: epc22
+            namespace: epc-container
 
       requirements:
         - owner:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_cassandra_configmap_epc22:
+    kubernetesresourceinstance_cassandra_configmap_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "Cassandra Config Map for EPC22"
+        name: "Cassandra Config Map for EPC Container"
         resource_definition: |
           apiVersion: v1
           data:
@@ -137,17 +137,17 @@ topology_template:
           kind: ConfigMap
           metadata:
             name: cassandra
-            namespace: epc22
+            namespace: epc-container
 
       requirements:
         - owner:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_hss_configmap_epc22:
+    kubernetesresourceinstance_hss_configmap_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "HSS Config Map for EPC22"
+        name: "HSS Config Map for EPC Container"
         resource_definition: |
           apiVersion: v1
           data:
@@ -391,17 +391,17 @@ topology_template:
           kind: ConfigMap
           metadata:
             name: hss
-            namespace: epc22
+            namespace: epc-container
 
       requirements:
         - owner:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_mme_configmap_epc22:
+    kubernetesresourceinstance_mme_configmap_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "MME Config Map for EPC22"
+        name: "MME Config Map for EPC Container"
         resource_definition: |
           apiVersion: v1
           data:
@@ -606,23 +606,23 @@ topology_template:
           kind: ConfigMap
           metadata:
             name: mme
-            namespace: epc22
+            namespace: epc-container
 
       requirements:
         - owner:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_mme_service_epc22:
+    kubernetesresourceinstance_mme_service_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "MME Service for EPC22"
+        name: "MME Service for EPC Container"
         resource_definition: |
           apiVersion: v1
           kind: Service
           metadata:
             name: mme
-            namespace: epc22
+            namespace: epc-container
           spec:
             selector:
               app: mme
@@ -643,16 +643,16 @@ topology_template:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_mme_statefulset_epc22:
+    kubernetesresourceinstance_mme_statefulset_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "MME StatefulSet for EPC22"
+        name: "MME StatefulSet for EPC Container"
         resource_definition: |
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
             name: mme
-            namespace: epc22
+            namespace: epc-container
             labels:
               app: mme
           spec:
@@ -679,7 +679,7 @@ topology_template:
                         - NET_ADMIN
                   args:
                   - iptables -A OUTPUT -p sctp --sport 36412 --chunk-types any ABORT -j DROP;
-                    until nslookup hss-0.hss.epc22.svc.cluster.local;
+                    until nslookup hss-0.hss.epc-container.svc.cluster.local;
                     do echo waiting for hss; sleep 2; done;
                 containers:
                 - name: cord-infra-sidecar
@@ -703,7 +703,7 @@ topology_template:
                   imagePullPolicy: Always
                   env:
                     - name: SGW_S11_IP
-                      value: ngic-0.ngic.epc22.svc.cluster.local
+                      value: ngic-0.ngic.epc-container.svc.cluster.local
                     - name: MME_ETH0_IP
                       valueFrom:
                         fieldRef:
@@ -713,11 +713,11 @@ topology_template:
                     - name: ENB_S1AP_PORT
                       value: "36412"   #ng4t uses 32767
                     - name: CONNECT_PEER
-                      value: hss-0.hss.epc22.svc.cluster.local
+                      value: hss-0.hss.epc-container.svc.cluster.local
                     - name: VAR_HSS_REALM
-                      value: hss.epc22.svc.cluster.local
+                      value: hss.epc-container.svc.cluster.local
                     - name: HSS_S6A_IP
-                      value: hss-0.hss.epc22.svc.cluster.local
+                      value: hss-0.hss.epc-container.svc.cluster.local
                     - name: HSS_PORT
                       value: "3868"
                   stdin: true
@@ -748,16 +748,16 @@ topology_template:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_hss_service_epc22:
+    kubernetesresourceinstance_hss_service_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "HSS Service for EPC22"
+        name: "HSS Service for EPC Container"
         resource_definition: |
           apiVersion: v1
           kind: Service
           metadata:
             name: hss
-            namespace: epc22
+            namespace: epc-container
           spec:
             selector:
               app: hss
@@ -772,16 +772,16 @@ topology_template:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_hss_statefulset_epc22:
+    kubernetesresourceinstance_hss_statefulset_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "HSS StatefulSet for EPC22"
+        name: "HSS StatefulSet for EPC Container"
         resource_definition: |
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
             name: hss
-            namespace: epc22
+            namespace: epc-container
             labels:
               app: hss
           spec:
@@ -803,13 +803,10 @@ topology_template:
                   args:
                   - until nslookup cassandra; do echo waiting for cassandra; sleep 2; done;
                     cqlsh --file /scripts/oai_db.cql cassandra;
-                    /scripts/data_provisioning_users.sh 302720100000421 1122334456 apn1 6226194254742F2D67145153602F7C8D 1 cassandra mme-0.mme.epc22.svc.cluster.local mme.epc22.svc.cluster.local;
+                    /scripts/data_provisioning_users.sh 302720100000421 1122334456 apn1 6226194254742F2D67145153602F7C8D 1 cassandra mme-0.mme.epc-container.svc.cluster.local mme.epc-container.svc.cluster.local;
                     cqlsh -e "use vhss; update users_imsi set opc='D6CAF10C337FD65AC31A18EBACBF5BF9' where imsi='302720100000421';" cassandra;
                     cqlsh -e "select imsi,key,opc,sqn from vhss.users_imsi;" cassandra;
-                    /scripts/data_provisioning_users.sh 302720100000420 1122334456 apn1 6226194254742F2D67145153602F7C8D 1 cassandra mme-0.mme.epc22.svc.cluster.local mme.epc22.svc.cluster.local;
-                    cqlsh -e "use vhss; update users_imsi set opc='D6CAF10C337FD65AC31A18EBACBF5BF9' where imsi='302720100000420';" cassandra;
-                    cqlsh -e "select imsi,key,opc,sqn from vhss.users_imsi;" cassandra;
-                    /scripts/data_provisioning_mme.sh 1 19136246000 mme-0.mme.epc22.svc.cluster.local mme.epc22.svc.cluster.local 1 cassandra;
+                    /scripts/data_provisioning_mme.sh 1 19136246000 mme-0.mme.epc-container.svc.cluster.local mme.epc-container.svc.cluster.local 1 cassandra;
                     /scripts/data_provisioning_mme.sh 1 19136246000 smsrouter.test3gpp.net test3gpp.net 0  cassandra;
                 containers:
                 - name: hss
@@ -819,7 +816,7 @@ topology_template:
                     - name: CASSANDRA_ADDR
                       value: cassandra
                     - name: MME_ADDR
-                      value: mme-0.mme.epc22.svc.cluster.local
+                      value: mme-0.mme.epc-container.svc.cluster.local
                   #command: [ "sleep", "3600"]
                   resources:
                     limits:
@@ -846,10 +843,10 @@ topology_template:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_hssdb_service_epc22:
+    kubernetesresourceinstance_hssdb_service_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "HSS Cassandra Service for EPC22"
+        name: "HSS Cassandra Service for EPC Container"
         resource_definition: |
           apiVersion: v1
           kind: Service
@@ -857,7 +854,7 @@ topology_template:
             labels:
               app: cassandra
             name: cassandra
-            namespace: epc22
+            namespace: epc-container
           spec:
             clusterIP: None
             ports:
@@ -870,16 +867,16 @@ topology_template:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_hssdb_statefulset_epc22:
+    kubernetesresourceinstance_hssdb_statefulset_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "HSS Cassandra StatefulSet for EPC22"
+        name: "HSS Cassandra StatefulSet for EPC Container"
         resource_definition: |
           apiVersion: "apps/v1"
           kind: StatefulSet
           metadata:
             name: cassandra
-            namespace: epc22
+            namespace: epc-container
             labels:
               app: cassandra
           spec:
@@ -934,7 +931,7 @@ topology_template:
                     - name: HEAP_NEWSIZE
                       value: 100M
                     - name: CASSANDRA_SEEDS
-                      value: "cassandra-0.cassandra.epc22.svc.cluster.local"
+                      value: "cassandra-0.cassandra.epc-container.svc.cluster.local"
                     - name: CASSANDRA_CLUSTER_NAME
                       value: "HSS Cluster"
                     - name: CASSANDRA_RPC_ADDRESS
@@ -972,16 +969,16 @@ topology_template:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_spgwcu_service_epc22:
+    kubernetesresourceinstance_spgwcu_service_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "SPGW Control and User Service for EPC22"
+        name: "SPGW Control and User Service for EPC Container"
         resource_definition: |
           apiVersion: v1
           kind: Service
           metadata:
             name: ngic
-            namespace: epc22
+            namespace: epc-container
           spec:
             selector:
               app: ngic
@@ -996,16 +993,16 @@ topology_template:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    kubernetesresourceinstance_spgwcu_statefulset_epc22:
+    kubernetesresourceinstance_spgwcu_statefulset_epc_container:
       type: tosca.nodes.KubernetesResourceInstance
       properties:
-        name: "SPGW Control and User StatefulSet for EPC22"
+        name: "SPGW Control and User StatefulSet for EPC Container"
         resource_definition: |
           apiVersion: apps/v1
           kind: StatefulSet
           metadata:
             name: ngic
-            namespace: epc22
+            namespace: epc-container
             labels:
               app: ngic
           spec:
@@ -1044,13 +1041,13 @@ topology_template:
                   tty: true
                   env:
                     - name: MME_S11_IP
-                      value: mme-0.mme.epc22.svc.cluster.local
+                      value: mme-0.mme.epc-container.svc.cluster.local
                     #- name: SGW_S1U_IP  # for now,this will be in our own pod
                     #  value: "5.5.5.5"
                     - name: APN
                       value: apn1
                     - name: IP_POOL_IP
-                      value: "12.0.0.0"
+                      value: "11.0.0.0"
                     - name: IP_POOL_MASK
                       value: "255.240.0.0"
                     - name: S11_TEID_POOL_START
@@ -1112,158 +1109,158 @@ topology_template:
             node: service#kubernetes
             relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_ngic_configmap_epc22:
+    vepcresourceinstancelink_ngic_configmap_epc_container:
       type: tosca.nodes.VEpcResourceInstanceLink
       properties:
-         name: "NGIC ConfigMap Resource Link for EPC22"
+         name: "NGIC ConfigMap Resource Link for EPC Container"
 
       requirements:
         - resource_instance:
-            node: kubernetesresourceinstance_ngic_configmap_epc22
+            node: kubernetesresourceinstance_ngic_configmap_epc_container
             relationship: tosca.relationships.BelongsToOne
         - vepc_service_instance:
-            node: vepcserviceinstance_epc22
+            node: vepcserviceinstance_epc_container
             relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_cassandra_configmap_epc22:
+    vepcresourceinstancelink_cassandra_configmap_epc_container:
       type: tosca.nodes.VEpcResourceInstanceLink
       properties:
-         name: "Cassandra ConfigMap Resource Link for EPC22"
+         name: "Cassandra ConfigMap Resource Link for EPC Container"
 
       requirements:
         - resource_instance:
-            node: kubernetesresourceinstance_cassandra_configmap_epc22
+            node: kubernetesresourceinstance_cassandra_configmap_epc_container
             relationship: tosca.relationships.BelongsToOne
         - vepc_service_instance:
-            node: vepcserviceinstance_epc22
+            node: vepcserviceinstance_epc_container
             relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_hss_configmap_epc22:
+    vepcresourceinstancelink_hss_configmap_epc_container:
       type: tosca.nodes.VEpcResourceInstanceLink
       properties:
-         name: "HSS ConfigMap Resource Link for EPC22"
+         name: "HSS ConfigMap Resource Link for EPC Container"
 
       requirements:
         - resource_instance:
-            node: kubernetesresourceinstance_hss_configmap_epc22
+            node: kubernetesresourceinstance_hss_configmap_epc_container
             relationship: tosca.relationships.BelongsToOne
         - vepc_service_instance:
-            node: vepcserviceinstance_epc22
+            node: vepcserviceinstance_epc_container
             relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_mme_configmap_epc22:
+    vepcresourceinstancelink_mme_configmap_epc_container:
       type: tosca.nodes.VEpcResourceInstanceLink
       properties:
-         name: "MME ConfigMap Resource Link for EPC22"
+         name: "MME ConfigMap Resource Link for EPC Container"
 
       requirements:
         - resource_instance:
-            node: kubernetesresourceinstance_mme_configmap_epc22
+            node: kubernetesresourceinstance_mme_configmap_epc_container
             relationship: tosca.relationships.BelongsToOne
         - vepc_service_instance:
-            node: vepcserviceinstance_epc22
+            node: vepcserviceinstance_epc_container
             relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_mme_service_epc22:
+    vepcresourceinstancelink_mme_service_epc_container:
       type: tosca.nodes.VEpcResourceInstanceLink
       properties:
-         name: "MME Service Resource Link for EPC22"
+         name: "MME Service Resource Link for EPC Container"
 
       requirements:
         - resource_instance:
-            node: kubernetesresourceinstance_mme_service_epc22
+            node: kubernetesresourceinstance_mme_service_epc_container
             relationship: tosca.relationships.BelongsToOne
         - vepc_service_instance:
-            node: vepcserviceinstance_epc22
+            node: vepcserviceinstance_epc_container
             relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_mme_statefulset_epc22:
+    vepcresourceinstancelink_mme_statefulset_epc_container:
         type: tosca.nodes.VEpcResourceInstanceLink
         properties:
-          name: "MME StatefulSet Resource Link for EPC22"
+          name: "MME StatefulSet Resource Link for EPC Container"
 
         requirements:
           - resource_instance:
-              node: kubernetesresourceinstance_mme_statefulset_epc22
+              node: kubernetesresourceinstance_mme_statefulset_epc_container
               relationship: tosca.relationships.BelongsToOne
           - vepc_service_instance:
-              node: vepcserviceinstance_epc22
+              node: vepcserviceinstance_epc_container
               relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_hss_service_epc22:
+    vepcresourceinstancelink_hss_service_epc_container:
       type: tosca.nodes.VEpcResourceInstanceLink
       properties:
-         name: "HSS Service Resource Link for EPC22"
+         name: "HSS Service Resource Link for EPC Container"
 
       requirements:
         - resource_instance:
-            node: kubernetesresourceinstance_hss_service_epc22
+            node: kubernetesresourceinstance_hss_service_epc_container
             relationship: tosca.relationships.BelongsToOne
         - vepc_service_instance:
-            node: vepcserviceinstance_epc22
+            node: vepcserviceinstance_epc_container
             relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_hss_statefulset_epc22:
+    vepcresourceinstancelink_hss_statefulset_epc_container:
         type: tosca.nodes.VEpcResourceInstanceLink
         properties:
-          name: "HSS StatefulSet Resource Link for EPC22"
+          name: "HSS StatefulSet Resource Link for EPC Container"
 
         requirements:
           - resource_instance:
-              node: kubernetesresourceinstance_hss_statefulset_epc22
+              node: kubernetesresourceinstance_hss_statefulset_epc_container
               relationship: tosca.relationships.BelongsToOne
           - vepc_service_instance:
-              node: vepcserviceinstance_epc22
+              node: vepcserviceinstance_epc_container
               relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_hssdb_service_epc22:
+    vepcresourceinstancelink_hssdb_service_epc_container:
       type: tosca.nodes.VEpcResourceInstanceLink
       properties:
-         name: "HSS Cassandra Service Resource Link for EPC22"
+         name: "HSS Cassandra Service Resource Link for EPC Container"
 
       requirements:
         - resource_instance:
-            node: kubernetesresourceinstance_hssdb_service_epc22
+            node: kubernetesresourceinstance_hssdb_service_epc_container
             relationship: tosca.relationships.BelongsToOne
         - vepc_service_instance:
-            node: vepcserviceinstance_epc22
+            node: vepcserviceinstance_epc_container
             relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_hssdb_statefulset_epc22:
+    vepcresourceinstancelink_hssdb_statefulset_epc_container:
         type: tosca.nodes.VEpcResourceInstanceLink
         properties:
-          name: "HSS Cassandra StatefulSet Resource Link for EPC22"
+          name: "HSS Cassandra StatefulSet Resource Link for EPC Container"
 
         requirements:
           - resource_instance:
-              node: kubernetesresourceinstance_hssdb_statefulset_epc22
+              node: kubernetesresourceinstance_hssdb_statefulset_epc_container
               relationship: tosca.relationships.BelongsToOne
           - vepc_service_instance:
-              node: vepcserviceinstance_epc22
+              node: vepcserviceinstance_epc_container
               relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_spgwcu_service_epc22:
+    vepcresourceinstancelink_spgwcu_service_epc_container:
       type: tosca.nodes.VEpcResourceInstanceLink
       properties:
-         name: "SPGW Contol and User Service Resource Link for EPC22"
+         name: "SPGW Contol and User Service Resource Link for EPC Container"
 
       requirements:
         - resource_instance:
-            node: kubernetesresourceinstance_spgwcu_service_epc22
+            node: kubernetesresourceinstance_spgwcu_service_epc_container
             relationship: tosca.relationships.BelongsToOne
         - vepc_service_instance:
-            node: vepcserviceinstance_epc22
+            node: vepcserviceinstance_epc_container
             relationship: tosca.relationships.BelongsToOne
 
-    vepcresourceinstancelink_spgwcu_statefulset_epc22:
+    vepcresourceinstancelink_spgwcu_statefulset_epc_container:
         type: tosca.nodes.VEpcResourceInstanceLink
         properties:
-          name: "HS SPGW Control and User StatefulSet Resource Link for EPC22"
+          name: "HS SPGW Control and User StatefulSet Resource Link for EPC Container"
 
         requirements:
           - resource_instance:
-              node: kubernetesresourceinstance_spgwcu_statefulset_epc22
+              node: kubernetesresourceinstance_spgwcu_statefulset_epc_container
               relationship: tosca.relationships.BelongsToOne
           - vepc_service_instance:
-              node: vepcserviceinstance_epc22
+              node: vepcserviceinstance_epc_container
               relationship: tosca.relationships.BelongsToOne

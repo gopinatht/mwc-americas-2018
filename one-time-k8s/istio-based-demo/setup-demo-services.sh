@@ -16,7 +16,7 @@ kubectl label namespace demo-services istio-injection=enabled
 
 #Install the demo services
 #Prerequisites:
-# - CD into mwc-americas-2018/one-time-k8s directory
+# - CD into ~/mwc-americas-2018/one-time-k8s/istio-based-demo directory
 kubectl apply -f download-service.yaml
 kubectl apply -f download-deployment-v1.yaml
 kubectl apply -f download-gateway.yaml
